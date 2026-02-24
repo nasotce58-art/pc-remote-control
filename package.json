@@ -24,8 +24,7 @@
   "author": "",
   "license": "MIT",
   "workspaces": [
-    "telegram-bot-node",
-    "cloudflare-worker"
+    "telegram-bot-node"
   ],
   "dependencies": {
     "cors": "^2.8.6",
