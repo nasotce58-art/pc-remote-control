@@ -154,7 +154,8 @@ async function answerCallbackQuery(callbackQueryId: string, text: string, env: E
 }
 
 async function handleSetWebhook(request: Request, env: Env): Promise<Response> {
-  const { webhookUrl } = await request.json();
+  const body = await request.json() as { webhookUrl?: string };
+  const { webhookUrl } = body;
   
   const url = `https://api.telegram.org/bot${env.BOT_TOKEN}/setWebhook`;
   

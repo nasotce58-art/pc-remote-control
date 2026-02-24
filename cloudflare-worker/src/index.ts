@@ -89,8 +89,8 @@ export default {
       // ==================== TELEGRAM WEBHOOK ====================
       // POST /telegram/webhook
       if (url.pathname === '/telegram/webhook' && method === 'POST') {
-        const telegramHandler = await import('./telegram-webhook');
-        return telegramHandler.default.fetch(request, env);
+        // Временно отключаем webhook обработчик
+        return new Response('Webhook disabled', { status: 200 });
       }
 
       // ==================== DEVICE REGISTRATION ====================
