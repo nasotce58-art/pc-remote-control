@@ -110,6 +110,164 @@ bot.start(async (ctx) => {
   }
 });
 
+// Start command
+bot.start(async (ctx) => {
+  const userId = ctx.from?.id;
+  const username = ctx.from?.username || 'unknown';
+  
+  console.log(`[/start] User ID: ${userId}, username: ${username}`);
+  
+  try {
+    // Check if user has linked device
+    const userDevice = await deviceStorage.checkUserDevice(userId);
+    
+    if (userDevice.linked && userDevice.deviceId) {
+      // Device is linked - show dashboard
+      const deviceId = userDevice.deviceId;
+      const deviceStatus = await deviceStorage.checkDeviceStatus(deviceId);
+      const statusText = deviceStatus.online ? '🟢 Online' : '🔴 Offline';
+      
+      await ctx.reply(
+        `🖥️ <b>PC Remote Control</b>\n\n` +
+        `Статус ПК: ${statusText}\n` +
+        `Device ID: ${deviceId}\n\n` +
+        `Выберите действие:`,
+        {
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '⚡ Рестарт', callback_data: 'restart_pc' },
+                { text: '💤 Сон', callback_data: 'sleep_pc' }
+              ],
+              [
+                { text: '⏹️ Выключить', callback_data: 'shutdown_pc' },
+                { text: '🔒 Блокировка', callback_data: 'lock_pc' }
+              ],
+              [
+                { text: '📊 Статус системы', callback_data: 'system_stats' }
+              ]
+            ]
+          }
+        }
+      );
+    } else {
+      // Device is not linked
+      await ctx.reply(
+        `👋 <b>Добро пожаловать в PC Remote Control!</b>\n\n` +
+        `У вас ещё нет привязанного ПК.\n\n` +
+        `Для подключения:\n` +
+        `1. Откройте приложение на ПК\n` +
+        `2. Скопируйте Device ID\n` +
+        `3. Отправьте команду:\n` +
+        `<code>/connect DEVICE_ID</code>\n\n` +
+        `Пример: <code>/connect TESTPC_001</code>`,
+        {
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '❓ Помощь', callback_data: 'help_connect' }]
+            ]
+          }
+        }
+      );
+    }
+  } catch (error) {
+    console.error('[/start] Error:', error.message);
+    await ctx.reply('⚠️ Ошибка: ' + error.message);
+  }
+});
+
+// Callback query handler (buttons)
+bot.on('callback_query', async (ctx) => {
+  const userId = ctx.from?.id;
+  const callbackData = ctx.callbackQuery?.data;
+  const messageId = ctx.callbackQuery?.message?.message_id;
+  
+  console.log(`[callback] User: ${userId}, Action: ${callbackData}`);
+  
+  try {
+    // Get user's device
+    const userDevice = await deviceStorage.checkUserDevice(userId);
+    
+    if (!userDevice.linked || !userDevice.deviceId) {
+      await ctx.answerCbQuery('❌ Сначала подключите ПК командой /connect');
+      return;
+    }
+    
+    const deviceId = userDevice.deviceId;
+    
+    // Handle callbacks
+    switch (callbackData) {
+      case 'restart_pc':
+        const restartResult = await commandDispatcher.sendPowerCommand(userId, deviceId, 'restart');
+        if (restartResult.success) {
+          await ctx.reply('⚡ ПК перезагружается...');
+        } else {
+          await ctx.reply(restartResult.message);
+        }
+        break;
+        
+      case 'sleep_pc':
+        const sleepResult = await commandDispatcher.sendPowerCommand(userId, deviceId, 'sleep');
+        if (sleepResult.success) {
+          await ctx.reply('💤 ПК переходит в спящий режим...');
+        } else {
+          await ctx.reply(sleepResult.message);
+        }
+        break;
+        
+      case 'shutdown_pc':
+        const shutdownResult = await commandDispatcher.sendPowerCommand(userId, deviceId, 'shutdown');
+        if (shutdownResult.success) {
+          await ctx.reply('⏹️ ПК выключается...');
+        } else {
+          await ctx.reply(shutdownResult.message);
+        }
+        break;
+        
+      case 'lock_pc':
+        const lockResult = await commandDispatcher.sendPowerCommand(userId, deviceId, 'lock');
+        if (lockResult.success) {
+          await ctx.reply('🔒 ПК заблокирован');
+        } else {
+          await ctx.reply(lockResult.message);
+        }
+        break;
+        
+      case 'system_stats':
+        const statsResult = await commandDispatcher.getSystemStatus(userId, deviceId);
+        if (statsResult.success && statsResult.data) {
+          const stats = statsResult.data;
+          await ctx.reply(
+            `📊 <b>Статус системы</b>\n\n` +
+            `💻 ПК: ${stats.hostname || 'Unknown'}\n` +
+            `🔋 Батарея: ${stats.batteryLevel || 'N/A'}%\n` +
+            `⚡ CPU: ${stats.cpuUsage || 'N/A'}%\n` +
+            `🧠 RAM: ${stats.ramUsed || 'N/A'} / ${stats.ramTotal || 'N/A'} GB`,
+            { parse_mode: 'HTML' }
+          );
+        } else {
+          await ctx.reply(statsResult.message || '❌ Не удалось получить статус');
+        }
+        break;
+        
+      case 'help_connect':
+        await ctx.answerCbQuery('📲 Отправьте /connect DEVICE_ID');
+        return;
+        
+      default:
+        await ctx.answerCbQuery('❓ Неизвестное действие');
+        return;
+    }
+    
+    await ctx.answerCbQuery();
+  } catch (error) {
+    console.error('[callback] Error:', error.message);
+    await ctx.answerCbQuery('⚠️ Ошибка: ' + error.message);
+  }
+});
+
 // Stats command (admin only)
 bot.command('stats', async (ctx) => {
   if (ctx.from?.id !== ADMIN_CHAT_ID) {
