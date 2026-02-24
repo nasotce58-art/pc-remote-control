@@ -1,0 +1,46 @@
+# Build results
+bin/
+obj/
+*.exe
+*.dll
+*.pdb
+
+# User-specific files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# IDE
+.vs/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Build outputs
+Release/
+Debug/
+*.o
+*.a
+*.lib
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+.nuget/
+
+# Logs
+Logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+*.lnk
+
+# App specific
+config.local.json
+credentials.json
+device.id

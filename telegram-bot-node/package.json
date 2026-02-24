@@ -1,0 +1,24 @@
+{
+  "name": "pc-remote-control-bot",
+  "version": "1.0.0",
+  "description": "Telegram Bot for PC Remote Control via Cloudflare Worker",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "test": "node bot-test.js",
+    "dev": "nodemon bot.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.1",
+    "socks-proxy-agent": "^8.0.5",
+    "telegraf": "^4.15.0",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "pc-remote-control-desktop",
+  "version": "2.0.0",
+  "description": "Desktop application for PC Remote Control",
+  "main": "main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "dotenv": "^16.3.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0",
+    "@vitejs/plugin-react": "^4.0.0"
+  }
+}

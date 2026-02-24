@@ -1,0 +1,226 @@
+<Window x:Class="PCRemoteControl.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="PC Remote Control" 
+        Height="700" 
+        Width="1000"
+        Background="#1E1E1E"
+        Foreground="#FFFFFF"
+        WindowStartupLocation="CenterScreen">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="60"/>
+            <RowDefinition Height="80"/>
+            <RowDefinition Height="1*"/>
+            <RowDefinition Height="150"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="#0D47A1" BorderThickness="0,0,0,1" BorderBrush="#1565C0">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="15,0">
+                <TextBlock Text="🖥️ PC Remote Control" FontSize="20" FontWeight="Bold" Foreground="White"/>
+                <TextBlock x:Name="StatusIndicator" Text="🟢 Online" FontSize="14" Foreground="#4CAF50" Margin="20,0,0,0" VerticalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Device Info -->
+        <Border Grid.Row="1" Background="#2D2D2D" BorderThickness="0,0,0,1" BorderBrush="#404040" Padding="15">
+            <StackPanel Orientation="Vertical" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                    <TextBlock Text="Device ID: " Foreground="#999999" FontWeight="Bold"/>
+                    <TextBlock x:Name="DeviceIdText" Text="LOADING..." Foreground="#4DA6FF" FontFamily="Courier New"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Status: Connected" Foreground="#4CAF50" FontWeight="Bold"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Main Content with Tabs -->
+        <Border Grid.Row="2" Background="#1E1E1E" Padding="0">
+            <TabControl Background="#1E1E1E" Foreground="#FFFFFF">
+                <!-- Tab: Power & Network -->
+                <TabItem Header="⚡ Питание и сеть" Background="#2D2D2D" Foreground="#FFFFFF">
+                    <Border Background="#1E1E1E" Padding="15">
+                        <StackPanel Orientation="Vertical">
+                            <TextBlock Text="Управление питанием" FontSize="14" FontWeight="Bold" Foreground="#4DA6FF" Margin="0,0,0,15"/>
+                            <WrapPanel>
+                                <Button Content="🔄 Restart" Click="Restart_Click" 
+                                        Background="#FF9800" Foreground="White" Padding="15,10" Margin="5" Cursor="Hand" Width="120"/>
+                                <Button Content="😴 Sleep" Click="Sleep_Click" 
+                                        Background="#2196F3" Foreground="White" Padding="15,10" Margin="5" Cursor="Hand" Width="120"/>
+                                <Button Content="🛑 Shutdown" Click="Shutdown_Click" 
+                                        Background="#F44336" Foreground="White" Padding="15,10" Margin="5" Cursor="Hand" Width="120"/>
+                                <Button Content="� Force Shutdown" Click="ForceShutdown_Click" 
+                                        Background="#D32F2F" Foreground="White" Padding="15,10" Margin="5" Cursor="Hand" Width="140"/>
+                                <Button Content="�📱 Monitor On/Off" Click="MonitorToggle_Click" 
+                                        Background="#9C27B0" Foreground="White" Padding="15,10" Margin="5" Cursor="Hand" Width="140"/>
+                                <Button Content="🔒 Lock" Click="Lock_Click" 
+                                        Background="#607D8B" Foreground="White" Padding="15,10" Margin="5" Cursor="Hand" Width="120"/>
+                            </WrapPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,15,0,0">
+                                <TextBlock Text="Таймер выключения (сек):" Foreground="#CCCCCC" VerticalAlignment="Center"/>
+                                <TextBox x:Name="ShutdownTimerInput" Width="80" Background="#2D2D2D" Foreground="#FFFFFF" 
+                                        Margin="10,0" Padding="5" Text="60"/>
+                                <Button Content="⏱️ Установить" Click="SetShutdownTimer_Click" 
+                                        Background="#4CAF50" Foreground="White" Padding="10,5" Cursor="Hand"/>
+                            </StackPanel>
+                            <TextBlock x:Name="PowerStatusText" Text="Статус: Готово" Foreground="#4DA6FF" Margin="0,15,0,0" FontSize="12"/>
+                        </StackPanel>
+                    </Border>
+                </TabItem>
+
+                <!-- Tab: Monitoring & Screen -->
+                <TabItem Header="📊 Мониторинг и экран" Background="#2D2D2D" Foreground="#FFFFFF">
+                    <Border Background="#1E1E1E" Padding="15">
+                        <StackPanel Orientation="Vertical">
+                            <TextBlock Text="Информация о системе" FontSize="14" FontWeight="Bold" Foreground="#4DA6FF" Margin="0,0,0,10"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <Button Content="📈 Обновить статус" Click="RefreshSystemStatus_Click" 
+                                        Background="#2196F3" Foreground="White" Padding="12,8" Margin="0,0,5,0" Cursor="Hand"/>
+                                <Button Content="📸 Скриншот" Click="TakeScreenshot_Click" 
+                                        Background="#4CAF50" Foreground="White" Padding="12,8" Margin="0,0,5,0" Cursor="Hand"/>
+                                <Button Content="🎥 Веб-камера" Click="WebcamCapture_Click" 
+                                        Background="#FF9800" Foreground="White" Padding="12,8" Margin="0,0,5,0" Cursor="Hand"/>
+                                <Button Content="📋 Список процессов" Click="ShowProcessList_Click" 
+                                        Background="#9C27B0" Foreground="White" Padding="12,8" Margin="0,0,5,0" Cursor="Hand"/>
+                            </StackPanel>
+                            <TextBlock Text="CPU, RAM, GPU:" Foreground="#CCCCCC" FontSize="12" Margin="0,10,0,5"/>
+                            <TextBox x:Name="SystemStatsText" Background="#2D2D2D" Foreground="#AAAAAA"
+                                    Height="80" Margin="0,0,0,10" Padding="5" IsReadOnly="True" TextWrapping="Wrap"
+                                    ScrollViewer.VerticalScrollBarVisibility="Auto" FontFamily="Courier New" FontSize="11"/>
+                            
+                            <TextBlock Text="Управление процессами" FontSize="12" FontWeight="Bold" Foreground="#4DA6FF" Margin="0,10,0,5"/>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBox x:Name="ProcessNameInput" Width="200" Background="#2D2D2D" Foreground="#FFFFFF" 
+                                        Margin="0,0,5,0" Padding="5" Text="notepad.exe"/>
+                                <Button Content="❌ Kill Process" Click="KillProcess_Click" 
+                                        Background="#F44336" Foreground="White" Padding="12,5" Cursor="Hand"/>
+                            </StackPanel>
+                            <TextBlock x:Name="MonitoringStatusText" Text="Статус: Готово" Foreground="#4DA6FF" Margin="0,10,0,0" FontSize="12"/>
+                        </StackPanel>
+                    </Border>
+                </TabItem>
+
+                <!-- Tab: Files & Applications -->
+                <TabItem Header="📁 Файлы и приложения" Background="#2D2D2D" Foreground="#FFFFFF">
+                    <Border Background="#1E1E1E" Padding="15">
+                        <StackPanel Orientation="Vertical">
+                            <TextBlock Text="Управление файлами" FontSize="14" FontWeight="Bold" Foreground="#4DA6FF" Margin="0,0,0,10"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <Button Content="🚀 Launcher" Click="Launcher_Click" 
+                                        Background="#4CAF50" Foreground="White" Padding="12,8" Margin="0,0,5,0" Cursor="Hand"/>
+                                <Button Content="🔍 Поиск файлов" Click="SearchFiles_Click" 
+                                        Background="#2196F3" Foreground="White" Padding="12,8" Margin="0,0,5,0" Cursor="Hand"/>
+                                <Button Content="📥 Download" Click="Download_Click" 
+                                        Background="#FF9800" Foreground="White" Padding="12,8" Margin="0,0,5,0" Cursor="Hand"/>
+                                <Button Content="📤 Upload" Click="Upload_Click" 
+                                        Background="#9C27B0" Foreground="White" Padding="12,8" Margin="0,0,5,0" Cursor="Hand"/>
+                            </StackPanel>
+                            <TextBlock Text="📱 Приложения" FontSize="12" FontWeight="Bold" Foreground="#4DA6FF" Margin="0,10,0,5"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <Button Content="➕ Add" Click="AddApp_Click" 
+                                        Background="#4CAF50" Foreground="White" Padding="12,6" Margin="0,0,5,0" Cursor="Hand"/>
+                                <Button Content="❌ Remove" Click="RemoveApp_Click" 
+                                        Background="#F44336" Foreground="White" Padding="12,6" Cursor="Hand"/>
+                            </StackPanel>
+                            <ListBox x:Name="ApplicationsGrid" 
+                                    Background="#2D2D2D" Foreground="#CCCCCC"
+                                    BorderBrush="#404040" 
+                                    ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                    FontFamily="Courier New"
+                                    FontSize="11"
+                                    Padding="5"
+                                    Height="60"/>
+                            <TextBlock x:Name="FilesStatusText" Text="Статус: Готово" Foreground="#4DA6FF" Margin="0,10,0,0" FontSize="12"/>
+                        </StackPanel>
+                    </Border>
+                </TabItem>
+
+                <!-- Tab: Input & Control -->
+                <TabItem Header="⌨️ Управление и ввод" Background="#2D2D2D" Foreground="#FFFFFF">
+                    <Border Background="#1E1E1E" Padding="15">
+                        <StackPanel Orientation="Vertical">
+                            <TextBlock Text="Управление системой" FontSize="14" FontWeight="Bold" Foreground="#4DA6FF" Margin="0,0,0,10"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <Button Content="📋 Копировать" Click="CopyClipboard_Click" 
+                                        Background="#2196F3" Foreground="White" Padding="12,8" Margin="0,0,5,0" Cursor="Hand"/>
+                                <Button Content="📋 Вставить" Click="PasteClipboard_Click" 
+                                        Background="#4CAF50" Foreground="White" Padding="12,8" Margin="0,0,5,0" Cursor="Hand"/>
+                                <Button Content="🔊 Громкость" Click="VolumeControl_Click" 
+                                        Background="#FF9800" Foreground="White" Padding="12,8" Margin="0,0,5,0" Cursor="Hand"/>
+                                <Button Content="⌨️ CMD" Click="ExecuteCmd_Click" 
+                                        Background="#F44336" Foreground="White" Padding="12,8" Margin="0,0,5,0" Cursor="Hand"/>
+                                <Button Content="🚫 Block Input" Click="BlockInput_Click" 
+                                        Background="#9C27B0" Foreground="White" Padding="12,8" Cursor="Hand"/>
+                            </StackPanel>
+                            <TextBlock Text="Буфер обмена:" Foreground="#CCCCCC" FontSize="12" Margin="0,10,0,5"/>
+                            <TextBox x:Name="ClipboardText" Background="#2D2D2D" Foreground="#FFFFFF"
+                                    Height="60" Margin="0,0,0,10" Padding="5" TextWrapping="Wrap"
+                                    ScrollViewer.VerticalScrollBarVisibility="Auto" FontFamily="Courier New" FontSize="11"/>
+                            
+                            <TextBlock Text="Команда CMD:" Foreground="#CCCCCC" FontSize="12" Margin="0,10,0,5"/>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBox x:Name="CmdInput" Background="#2D2D2D" Foreground="#FFFFFF" 
+                                        Margin="0,0,5,0" Padding="5" Height="30" Text="dir C:\"/>
+                                <Button Content="▶️ Выполнить" Click="RunCmd_Click" 
+                                        Background="#4CAF50" Foreground="White" Padding="12,5" Cursor="Hand"/>
+                            </StackPanel>
+                            <TextBlock x:Name="InputControlStatusText" Text="Статус: Готово" Foreground="#4DA6FF" Margin="0,10,0,0" FontSize="12"/>
+                        </StackPanel>
+                    </Border>
+                </TabItem>
+
+                <!-- Tab: Settings -->
+                <TabItem Header="⚙️ Настройки" Background="#2D2D2D" Foreground="#FFFFFF">
+                    <Border Background="#1E1E1E" Padding="15">
+                        <StackPanel Orientation="Vertical">
+                            <TextBlock Text="Параметры системы" FontSize="14" FontWeight="Bold" Foreground="#4DA6FF" Margin="0,0,0,10"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <Button Content="🚀 Автозагрузка" Click="Autostart_Click" 
+                                        Background="#2196F3" Foreground="White" Padding="12,8" Margin="0,0,5,0" Cursor="Hand"/>
+                                <Button Content="🔔 Уведомления" Click="Notifications_Click" 
+                                        Background="#FF9800" Foreground="White" Padding="12,8" Margin="0,0,5,0" Cursor="Hand"/>
+                                <Button Content="ℹ️ О программе" Click="About_Click" 
+                                        Background="#4CAF50" Foreground="White" Padding="12,8" Cursor="Hand"/>
+                            </StackPanel>
+                            <TextBlock Text="Автозагрузка" FontSize="12" FontWeight="Bold" Foreground="#4DA6FF" Margin="0,15,0,5"/>
+                            <StackPanel Orientation="Horizontal">
+                                <CheckBox x:Name="AutostartCheckbox" Content="Запускать при загрузке Windows" 
+                                        Foreground="#CCCCCC" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <Button Content="💾 Сохранить" Click="SaveAutostart_Click" 
+                                        Background="#4CAF50" Foreground="White" Padding="10,5" Cursor="Hand"/>
+                            </StackPanel>
+                            <TextBlock Text="Уведомления" FontSize="12" FontWeight="Bold" Foreground="#4DA6FF" Margin="0,15,0,5"/>
+                            <StackPanel Orientation="Horizontal">
+                                <CheckBox x:Name="NotificationsCheckbox" Content="Включить уведомления" 
+                                        Foreground="#CCCCCC" VerticalAlignment="Center" IsChecked="True" Margin="0,0,10,0"/>
+                                <Button Content="🔔 Тест" Click="TestNotification_Click" 
+                                        Background="#FF9800" Foreground="White" Padding="10,5" Cursor="Hand"/>
+                            </StackPanel>
+                            <TextBlock x:Name="SettingsStatusText" Text="Статус: Готово" Foreground="#4DA6FF" Margin="0,15,0,0" FontSize="12"/>
+                        </StackPanel>
+                    </Border>
+                </TabItem>
+            </TabControl>
+        </Border>
+
+        <!-- Event Log -->
+        <Border Grid.Row="3" Background="#2D2D2D" BorderThickness="0,1,0,0" BorderBrush="#404040" Padding="15">
+            <StackPanel Orientation="Vertical">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                    <TextBlock Text="📋 Event Log:" FontSize="12" FontWeight="Bold" Foreground="#4DA6FF"/>
+                    <Button Content="🗑️ Clear" Click="ClearLog_Click" 
+                            Background="#F44336" Foreground="White" Padding="8,2" Margin="10,0,0,0" Cursor="Hand" FontSize="10"/>
+                </StackPanel>
+                <ListBox x:Name="LogListBox" 
+                        Background="#1E1E1E" Foreground="#AAAAAA"
+                        BorderBrush="#404040" 
+                        ScrollViewer.VerticalScrollBarVisibility="Auto"
+                        FontFamily="Courier New"
+                        FontSize="10"
+                        Padding="5"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
