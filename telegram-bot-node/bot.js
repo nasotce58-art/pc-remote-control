@@ -1,11 +1,10 @@
 /**
- * PC Remote Control - Telegram Bot с прокси поддержкой
+ * PC Remote Control - Telegram Bot
  */
 
 require('dotenv').config();
 const { Telegraf } = require('telegraf');
 const axios = require('axios');
-const HttpsProxyAgent = require('https-proxy-agent');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const CLOUDFLARE_WORKER_URL = process.env.CLOUDFLARE_WORKER_URL;
