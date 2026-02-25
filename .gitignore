@@ -1,4 +1,12 @@
 node_modules/
-nul
-*.log
 .env
+dist/
+build/
+*.log
+.DS_Store
+app/desktop/
+cloudflare-worker/
+app/windows-client/
+examples/
+*.sln
+.vs/
