@@ -1,128 +1,83 @@
-# 🖥️ PC Remote Control - Telegram Bot
+# 🖥️ PC Remote Control v2.0
 
 Управление компьютером через Telegram бота с использованием Cloudflare Worker.
 
 ---
 
-## 📋 Требования
-
-- **Node.js 18+** (для бота и desktop приложения)
-- **Telegram Bot Token** (получить у [@BotFather](https://t.me/BotFather))
-- **Cloudflare Account** (для развертывания Worker)
-- **Windows/Linux/macOS** (для desktop клиента)
-
----
-
 ## 🚀 Быстрый старт
 
-### Шаг 1: Настройка Cloudflare Worker
+### 1. Cloudflare Worker
 
-1. Войдите в [Cloudflare Dashboard](https://dash.cloudflare.com/)
-2. Перейдите в **Workers & Pages** → **Create Worker**
-3. Назовите его `pc-remote-control`
-4. Скопируйте код из `cloudflare-worker/src/index.ts` в редактор Worker
-5. Создайте KV Namespaces:
-   - `USERS_KV`
-   - `DEVICES_KV`
-   - `COMMANDS_KV`
-   - `RESULTS_KV`
-   - `PAIRING_KV`
-6. Привяжите KV к Worker в настройках
-7. Deploy Worker
+```bash
+cd cloudflare-worker
+wrangler deploy
+```
 
-### Шаг 2: Настройка Telegram бота
+URL после деплоя: `https://your-worker.workers.dev`
 
-1. Откройте [@BotFather](https://t.me/BotFather) в Telegram
-2. Отправьте `/newbot`
-3. Следуйте инструкциям
-4. Скопируйте полученный токен
+### 2. Telegram Bot
 
-### Шаг 3: Конфигурация
+Создайте `.env` в корне проекта:
 
-#### Telegram Bot (Node.js)
+```env
+BOT_TOKEN=your_bot_token
+CLOUDFLARE_WORKER_URL=https://your-worker.workers.dev
+ADMIN_CHAT_ID=your_chat_id
+```
+
+Запуск:
 
 ```bash
 cd telegram-bot-node
-cp .env.example .env
+npm install
+npm start
 ```
 
-Отредактируйте `.env`:
-
-```env
-BOT_TOKEN=ваш_токен_бота
-CLOUDFLARE_WORKER_URL=https://pc-remote-control.ваш-username.workers.dev
-ADMIN_CHAT_ID=ваш_chat_id_telegram
-```
-
-#### Desktop App
+### 3. Desktop Приложение
 
 ```bash
 cd app/desktop
 npm install
-```
-
----
-
-## ▶️ Запуск
-
-### Telegram Бот
-
-```bash
-cd telegram-bot-node
-npm start
-```
-
-### Desktop Приложение (Development)
-
-```bash
-cd app/desktop
 npm run dev
 ```
 
-### Desktop Приложение (Production)
-
-```bash
-cd app/desktop
-npm run build
-```
+Откройте: http://localhost:5173
 
 ---
 
-## 📱 Использование
+## 📱 Telegram Bot
 
-### Первое подключение ПК
-
-1. Запустите desktop приложение
-2. Перейдите в **Настройки**
-3. Введите **Worker URL**
-4. Нажмите **Генерировать** для Device ID
-5. Нажмите **Проверить подключение**
-6. Нажмите **Сохранить настройки**
-
-### Подключение через Telegram
-
-1. Откройте вашего бота в Telegram
-2. Отправьте `/start`
-3. Отправьте `/connect ВАШ_DEVICE_ID`
-4. Подтвердите подключение на ПК
-5. Готово!
-
-### Доступные команды
+### Команды:
 
 | Команда | Описание |
 |---------|----------|
-| `/start` | Главное меню |
+| `/start` | Главное меню с кнопками |
 | `/connect DEVICE_ID` | Подключить ПК |
 | `/unbind` | Отвязать ПК |
+| `/stats` | Статистика (админ) |
 | `/help` | Справка |
 
-### Кнопки управления
+### Кнопки:
 
-- **⚡ Рестарт** - Перезагрузка ПК
-- **💤 Сон** - Спящий режим
-- **⏹️ Выключить** - Выключение ПК
-- **🔒 Блокировка** - Блокировка экрана
-- **📊 Статус системы** - Информация о системе
+- ⚡ **Рестарт** - Перезагрузка ПК
+- 💤 **Сон** - Спящий режим
+- ⏹️ **Выключить** - Выключение ПК
+- 🔒 **Блокировка** - Блокировка экрана
+- 📊 **Статус** - Статус системы
+- 🔌 **Отвязать** - Отвязать ПК
+
+---
+
+## 🖥️ Desktop Приложение
+
+### Настройка:
+
+1. Откройте http://localhost:5173
+2. Введите **Worker URL**
+3. Введите **Device ID** (или сгенерируйте)
+4. Нажмите **Сохранить**
+
+Приложение автоматически отправляет heartbeat каждые 30 секунд.
 
 ---
 
@@ -155,25 +110,17 @@ npm run build
 
 ```
 c:\conrol pc/
-├── telegram-bot-node/       # Telegram бот
-│   ├── bot.js              # Основной файл бота
-│   ├── functions/          # Модули функций
-│   │   ├── power-control/  # Управление питанием
-│   │   ├── monitoring/     # Мониторинг
-│   │   ├── pairing-handler.js
-│   │   └── ...
-│   └── .env
+├── telegram-bot-node/     # Telegram бот
+│   ├── bot.js            # Основной файл
+│   └── package.json
 │
-├── cloudflare-worker/      # Cloudflare Worker
-│   ├── src/index.ts       # API сервер
+├── cloudflare-worker/     # Cloudflare Worker
+│   ├── src/index.ts      # API сервер
 │   └── wrangler.toml
 │
-├── app/desktop/           # Desktop приложение
-│   ├── main.js           # Electron main process
-│   ├── src/
-│   │   ├── cloudflare-client.js
-│   │   ├── command-executor.js
-│   │   └── components/
+├── app/desktop/          # Desktop приложение
+│   ├── public/index.html # UI
+│   ├── main.js          # Electron
 │   └── package.json
 │
 └── README.md             # Эта инструкция
@@ -181,34 +128,106 @@ c:\conrol pc/
 
 ---
 
-## 🔧 Troubleshooting
+## 🔧 Настройка
+
+### 1. Получите токен бота
+
+1. Откройте [@BotFather](https://t.me/BotFather)
+2. `/newbot`
+3. Скопируйте токен
+
+### 2. Разверните Cloudflare Worker
+
+```bash
+cd cloudflare-worker
+wrangler login
+wrangler deploy
+```
+
+### 3. Настройте .env
+
+```env
+BOT_TOKEN=8433887802:YOUR_TOKEN
+CLOUDFLARE_WORKER_URL=https://your-worker.workers.dev
+ADMIN_CHAT_ID=your_chat_id
+```
+
+### 4. Запустите бота
+
+```bash
+cd telegram-bot-node
+npm install
+npm start
+```
+
+### 5. Запустите Desktop
+
+```bash
+cd app/desktop
+npm install
+npm run dev
+```
+
+---
+
+## ✅ Проверка работы
+
+1. **Откройте бота** в Telegram
+2. **`/start`** - должны появиться кнопки
+3. **Откройте Desktop** приложение
+4. **Сохраните настройки** (Worker URL + Device ID)
+5. **`/connect DEVICE_ID`** в боте
+6. **Нажмите кнопки** в боте - ПК должен реагировать!
+
+---
+
+## 🐛 Troubleshooting
 
 ### Бот не отвечает
 
 1. Проверьте токен в `.env`
-2. Убедитесь что Worker развернут
-3. Проверьте логи: `npm start` в telegram-bot-node
+2. Проверьте логи Railway/локально
+3. Убедитесь что Worker доступен
 
-### Desktop приложение не подключается
+### Desktop не подключается
 
 1. Проверьте Worker URL
-2. Убедитесь что Device ID существует в KV
-3. Проверьте firewall
+2. Проверьте Device ID
+3. Посмотрите логи в приложении
 
-### Ошибки KV
+### Ошибка 404
 
-1. Убедитесь что все 5 KV namespaces созданы
-2. Проверьте привязку KV к Worker
-3. Пересоздайте Worker
+1. Проверьте что Worker развернут
+2. Проверьте URL в `.env`
+3. Пересоздайте KV namespaces
 
 ---
 
-## 🔐 Безопасность
+## 📊 API Endpoints
 
-- Все команды авторизуются через Telegram User ID
-- Device ID уникален для каждого ПК
-- Pairing требует подтверждения на ПК
-- KV Storage шифруется Cloudflare
+| Endpoint | Method | Описание |
+|----------|--------|----------|
+| `/api/register` | POST | Регистрация устройства |
+| `/api/device/{id}/heartbeat` | POST | Heartbeat |
+| `/api/device/{id}/status` | GET | Статус устройства |
+| `/api/user/{id}/device` | GET | Устройство пользователя |
+| `/api/user/{id}/link/{deviceId}` | POST | Привязка устройства |
+| `/api/user/{id}/unlink` | DELETE | Отвязка устройства |
+| `/api/commands/{deviceId}` | POST | Отправка команды |
+| `/api/users/stats` | GET | Статистика |
+| `/api/users/list` | GET | Список пользователей |
+
+---
+
+## 🎯 Команды ПК
+
+| Команда | Описание |
+|---------|----------|
+| `restart` | Перезагрузка |
+| `shutdown` | Выключение |
+| `sleep` | Спящий режим |
+| `lock` | Блокировка |
+| `system_stats` | Статус системы |
 
 ---
 
@@ -220,11 +239,4 @@ MIT
 
 ## 🤝 Поддержка
 
-Создайте issue в репозитории или обратитесь к разработчику.
-# pc-remote-control
-# pc-remote-control
-# pc-remote-control
-# pc-remote-control
-# pc-remote-control
-# pc-remote-control
-# redeploy
+Создайте issue в репозитории.

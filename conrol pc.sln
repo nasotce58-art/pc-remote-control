@@ -1,0 +1,32 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "app", "app", "{F95F473B-E98A-ACD6-1986-755F447BE36F}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "windows-client", "windows-client", "{9181F9AF-9A7C-B9E2-3F48-3D67E048A579}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PCRemoteControl", "app\windows-client\PCRemoteControl.csproj", "{902D6EDF-A91A-1970-0D9D-89C55D6D7B65}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{902D6EDF-A91A-1970-0D9D-89C55D6D7B65}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{902D6EDF-A91A-1970-0D9D-89C55D6D7B65}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{902D6EDF-A91A-1970-0D9D-89C55D6D7B65}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{902D6EDF-A91A-1970-0D9D-89C55D6D7B65}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{9181F9AF-9A7C-B9E2-3F48-3D67E048A579} = {F95F473B-E98A-ACD6-1986-755F447BE36F}
+		{902D6EDF-A91A-1970-0D9D-89C55D6D7B65} = {9181F9AF-9A7C-B9E2-3F48-3D67E048A579}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {54D235C0-D742-4BA7-891C-67052F06FB6D}
+	EndGlobalSection
+EndGlobal

@@ -191,14 +191,14 @@ export default {
       }
 
       // ==================== USERS MANAGEMENT (for broadcast) ====================
-      // GET /api/users/list - get all users
-      if (url.pathname === '/api/users/list' && method === 'GET') {
-        return await handleGetUsersList(env, corsHeaders);
-      }
-
       // GET /api/users/stats - get users statistics
       if (url.pathname === '/api/users/stats' && method === 'GET') {
         return await handleGetUsersStats(env, corsHeaders);
+      }
+
+      // GET /api/users/list - get all users
+      if (url.pathname === '/api/users/list' && method === 'GET') {
+        return await handleGetUsersList(env, corsHeaders);
       }
 
       // 404

@@ -1,322 +1,304 @@
 /**
  * PC Remote Control - Telegram Bot
+ * Полностью переписанная версия
  */
 
 require('dotenv').config();
 const { Telegraf } = require('telegraf');
 const axios = require('axios');
 
+// Configuration
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const CLOUDFLARE_WORKER_URL = process.env.CLOUDFLARE_WORKER_URL;
+const WORKER_URL = process.env.CLOUDFLARE_WORKER_URL;
 const ADMIN_CHAT_ID = parseInt(process.env.ADMIN_CHAT_ID);
 
-// Import handlers
-const { registerPowerControlHandlers } = require('./functions/power-control');
-const { registerMonitoringHandlers } = require('./functions/monitoring');
-const { registerPairingHandler } = require('./functions/pairing-handler');
-const { registerUnbindHandler } = require('./functions/unbind-handler');
-const { registerBroadcastHandler } = require('./functions/broadcast-handler');
-const { createDeviceStorage } = require('./functions/device-storage');
-const { createCommandDispatcher } = require('./functions/command-dispatcher');
-
-if (!BOT_TOKEN) {
-  console.error('❌ ERROR: BOT_TOKEN not set in .env');
+if (!BOT_TOKEN || !WORKER_URL) {
+  console.error('❌ BOT_TOKEN и CLOUDFLARE_WORKER_URL должны быть в .env');
   process.exit(1);
 }
 
-if (!CLOUDFLARE_WORKER_URL) {
-  console.error('❌ ERROR: CLOUDFLARE_WORKER_URL not set in .env');
-  process.exit(1);
-}
-
-// Create bot instance
+// Create bot
 const bot = new Telegraf(BOT_TOKEN);
 
-console.log('🤖 Bot instance created');
+console.log('🤖 Bot starting...');
 
-const deviceStorage = createDeviceStorage(CLOUDFLARE_WORKER_URL);
-const commandDispatcher = createCommandDispatcher(CLOUDFLARE_WORKER_URL);
+// ==================== HELPER FUNCTIONS ====================
 
-console.log('✅ Service modules initialized');
-
-// Register handlers
-try {
-  registerPairingHandler(bot, CLOUDFLARE_WORKER_URL);
-  console.log('✅ Pairing handler registered');
-} catch (error) {
-  console.error('❌ Error registering pairing handler:', error);
-  process.exit(1);
+async function getUserDevice(userId) {
+  try {
+    const res = await axios.get(`${WORKER_URL}/api/user/${userId}/device`);
+    return res.data;
+  } catch (e) {
+    return { linked: false, deviceId: null };
+  }
 }
 
-try {
-  registerUnbindHandler(bot, CLOUDFLARE_WORKER_URL);
-  console.log('✅ Unbind handler registered');
-} catch (error) {
-  console.error('❌ Error registering unbind handler:', error);
-  process.exit(1);
+async function getDeviceStatus(deviceId) {
+  try {
+    const res = await axios.get(`${WORKER_URL}/api/device/${deviceId}/status`);
+    return res.data.ok ? res.data.device : null;
+  } catch (e) {
+    return null;
+  }
 }
 
-try {
-  registerPowerControlHandlers(bot, CLOUDFLARE_WORKER_URL);
-  console.log('✅ Power control handlers registered');
-} catch (error) {
-  console.error('❌ Error registering power control handlers:', error);
-  process.exit(1);
+async function sendCommand(deviceId, command, argument = null) {
+  try {
+    const res = await axios.post(`${WORKER_URL}/api/commands/${deviceId}`, {
+      command,
+      argument
+    });
+    return { ok: true, commandId: res.data.commandId };
+  } catch (e) {
+    return { ok: false, error: e.response?.data?.error || e.message };
+  }
 }
 
-try {
-  registerMonitoringHandlers(bot, CLOUDFLARE_WORKER_URL);
-  console.log('✅ Monitoring handlers registered');
-} catch (error) {
-  console.error('❌ Error registering monitoring handlers:', error);
-  process.exit(1);
-}
+// ==================== COMMANDS ====================
 
-try {
-  registerBroadcastHandler(bot, CLOUDFLARE_WORKER_URL, ADMIN_CHAT_ID);
-  console.log('✅ Broadcast handler registered');
-} catch (error) {
-  console.error('❌ Error registering broadcast handler:', error);
-  process.exit(1);
-}
-
-// Start command
 bot.start(async (ctx) => {
   const userId = ctx.from?.id;
-  console.log(`[/start] User ID: ${userId}`);
+  console.log(`[/start] User ${userId}`);
   
-  try {
-    const userDevice = await deviceStorage.checkUserDevice(userId);
+  const userDevice = await getUserDevice(userId);
+  
+  if (userDevice.linked && userDevice.deviceId) {
+    const status = await getDeviceStatus(userDevice.deviceId);
+    const statusText = status?.status === 'online' ? '🟢 Online' : '🔴 Offline';
     
-    if (userDevice.linked && userDevice.deviceId) {
-      const deviceStatus = await deviceStorage.checkDeviceStatus(userDevice.deviceId);
-      const statusText = deviceStatus.online ? '🟢 Online' : '🔴 Offline';
-      
-      await ctx.reply(`🖥️ <b>PC Remote Control</b>\n\nСтатус: ${statusText}`, {
+    await ctx.reply(
+      `🖥️ <b>PC Remote Control</b>\n\n` +
+      `Статус: ${statusText}\n` +
+      `Устройство: ${userDevice.deviceId}\n\n` +
+      `Выберите действие:`,
+      {
         parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [
-            [{ text: '⚡ Рестарт', callback_data: 'restart_pc' }],
-            [{ text: '💤 Сон', callback_data: 'sleep_pc' }],
-            [{ text: '⏹️ Выключить', callback_data: 'shutdown_pc' }]
+            [
+              { text: '⚡ Рестарт', callback_data: 'restart' },
+              { text: '💤 Сон', callback_data: 'sleep' }
+            ],
+            [
+              { text: '⏹️ Выключить', callback_data: 'shutdown' },
+              { text: '🔒 Блокировка', callback_data: 'lock' }
+            ],
+            [
+              { text: '📊 Статус', callback_data: 'stats' },
+              { text: '🔌 Отвязать', callback_data: 'unbind' }
+            ]
           ]
         }
-      });
-    } else {
-      await ctx.reply('❌ ПК не подключен\n\nИспользуйте /connect DEVICE_ID');
-    }
-  } catch (error) {
-    await ctx.reply('⚠️ Ошибка: ' + error.message);
+      }
+    );
+  } else {
+    await ctx.reply(
+      `👋 <b>Добро пожаловать!</b>\n\n` +
+      `У вас нет привязанного ПК.\n\n` +
+      `Для подключения:\n` +
+      `1. Откройте приложение на ПК\n` +
+      `2. Скопируйте Device ID\n` +
+      `3. Отправьте: <code>/connect DEVICE_ID</code>\n\n` +
+      `Пример: <code>/connect ABCD-1234</code>`,
+      {
+        parse_mode: 'HTML',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '❓ Помощь', callback_data: 'help' }]
+          ]
+        }
+      }
+    );
   }
 });
 
-// Start command
-bot.start(async (ctx) => {
+bot.command('connect', async (ctx) => {
   const userId = ctx.from?.id;
-  const username = ctx.from?.username || 'unknown';
+  const deviceId = ctx.message.text.split(' ')[1]?.toUpperCase();
   
-  console.log(`[/start] User ID: ${userId}, username: ${username}`);
+  console.log(`[/connect] User ${userId}, Device ${deviceId}`);
   
+  if (!deviceId) {
+    await ctx.reply('❌ Использование: /connect DEVICE_ID\nПример: /connect ABCD-1234');
+    return;
+  }
+  
+  // Check if device exists
+  const deviceStatus = await getDeviceStatus(deviceId);
+  if (!deviceStatus) {
+    await ctx.reply('❌ Устройство не найдено. Проверьте Device ID.');
+    return;
+  }
+  
+  // Link user to device
   try {
-    // Check if user has linked device
-    const userDevice = await deviceStorage.checkUserDevice(userId);
-    
-    if (userDevice.linked && userDevice.deviceId) {
-      // Device is linked - show dashboard
-      const deviceId = userDevice.deviceId;
-      const deviceStatus = await deviceStorage.checkDeviceStatus(deviceId);
-      const statusText = deviceStatus.online ? '🟢 Online' : '🔴 Offline';
-      
-      await ctx.reply(
-        `🖥️ <b>PC Remote Control</b>\n\n` +
-        `Статус ПК: ${statusText}\n` +
-        `Device ID: ${deviceId}\n\n` +
-        `Выберите действие:`,
-        {
-          parse_mode: 'HTML',
-          reply_markup: {
-            inline_keyboard: [
-              [
-                { text: '⚡ Рестарт', callback_data: 'restart_pc' },
-                { text: '💤 Сон', callback_data: 'sleep_pc' }
-              ],
-              [
-                { text: '⏹️ Выключить', callback_data: 'shutdown_pc' },
-                { text: '🔒 Блокировка', callback_data: 'lock_pc' }
-              ],
-              [
-                { text: '📊 Статус системы', callback_data: 'system_stats' }
-              ]
-            ]
-          }
-        }
-      );
-    } else {
-      // Device is not linked
-      await ctx.reply(
-        `👋 <b>Добро пожаловать в PC Remote Control!</b>\n\n` +
-        `У вас ещё нет привязанного ПК.\n\n` +
-        `Для подключения:\n` +
-        `1. Откройте приложение на ПК\n` +
-        `2. Скопируйте Device ID\n` +
-        `3. Отправьте команду:\n` +
-        `<code>/connect DEVICE_ID</code>\n\n` +
-        `Пример: <code>/connect TESTPC_001</code>`,
-        {
-          parse_mode: 'HTML',
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: '❓ Помощь', callback_data: 'help_connect' }]
-            ]
-          }
-        }
-      );
-    }
-  } catch (error) {
-    console.error('[/start] Error:', error.message);
-    await ctx.reply('⚠️ Ошибка: ' + error.message);
+    await axios.post(`${WORKER_URL}/api/user/${userId}/link/${deviceId}`);
+    await ctx.reply(`✅ ПК <b>${deviceId}</b> подключен!`, { parse_mode: 'HTML' });
+  } catch (e) {
+    await ctx.reply('❌ Ошибка подключения: ' + e.response?.data?.error || e.message);
   }
 });
 
-// Callback query handler (buttons)
-bot.on('callback_query', async (ctx) => {
+bot.command('unbind', async (ctx) => {
   const userId = ctx.from?.id;
-  const callbackData = ctx.callbackQuery?.data;
-  const messageId = ctx.callbackQuery?.message?.message_id;
+  console.log(`[/unbind] User ${userId}`);
   
-  console.log(`[callback] User: ${userId}, Action: ${callbackData}`);
-  
-  try {
-    // Get user's device
-    const userDevice = await deviceStorage.checkUserDevice(userId);
-    
-    if (!userDevice.linked || !userDevice.deviceId) {
-      await ctx.answerCbQuery('❌ Сначала подключите ПК командой /connect');
-      return;
-    }
-    
-    const deviceId = userDevice.deviceId;
-    
-    // Handle callbacks
-    switch (callbackData) {
-      case 'restart_pc':
-        const restartResult = await commandDispatcher.sendPowerCommand(userId, deviceId, 'restart');
-        if (restartResult.success) {
-          await ctx.reply('⚡ ПК перезагружается...');
-        } else {
-          await ctx.reply(restartResult.message);
-        }
-        break;
-        
-      case 'sleep_pc':
-        const sleepResult = await commandDispatcher.sendPowerCommand(userId, deviceId, 'sleep');
-        if (sleepResult.success) {
-          await ctx.reply('💤 ПК переходит в спящий режим...');
-        } else {
-          await ctx.reply(sleepResult.message);
-        }
-        break;
-        
-      case 'shutdown_pc':
-        const shutdownResult = await commandDispatcher.sendPowerCommand(userId, deviceId, 'shutdown');
-        if (shutdownResult.success) {
-          await ctx.reply('⏹️ ПК выключается...');
-        } else {
-          await ctx.reply(shutdownResult.message);
-        }
-        break;
-        
-      case 'lock_pc':
-        const lockResult = await commandDispatcher.sendPowerCommand(userId, deviceId, 'lock');
-        if (lockResult.success) {
-          await ctx.reply('🔒 ПК заблокирован');
-        } else {
-          await ctx.reply(lockResult.message);
-        }
-        break;
-        
-      case 'system_stats':
-        const statsResult = await commandDispatcher.getSystemStatus(userId, deviceId);
-        if (statsResult.success && statsResult.data) {
-          const stats = statsResult.data;
-          await ctx.reply(
-            `📊 <b>Статус системы</b>\n\n` +
-            `💻 ПК: ${stats.hostname || 'Unknown'}\n` +
-            `🔋 Батарея: ${stats.batteryLevel || 'N/A'}%\n` +
-            `⚡ CPU: ${stats.cpuUsage || 'N/A'}%\n` +
-            `🧠 RAM: ${stats.ramUsed || 'N/A'} / ${stats.ramTotal || 'N/A'} GB`,
-            { parse_mode: 'HTML' }
-          );
-        } else {
-          await ctx.reply(statsResult.message || '❌ Не удалось получить статус');
-        }
-        break;
-        
-      case 'help_connect':
-        await ctx.answerCbQuery('📲 Отправьте /connect DEVICE_ID');
-        return;
-        
-      default:
-        await ctx.answerCbQuery('❓ Неизвестное действие');
-        return;
-    }
-    
-    await ctx.answerCbQuery();
-  } catch (error) {
-    console.error('[callback] Error:', error.message);
-    await ctx.answerCbQuery('⚠️ Ошибка: ' + error.message);
-  }
-});
-
-// Stats command (admin only)
-bot.command('stats', async (ctx) => {
-  if (ctx.from?.id !== ADMIN_CHAT_ID) {
-    await ctx.reply('❌ Доступ запрещен');
+  const userDevice = await getUserDevice(userId);
+  if (!userDevice.linked) {
+    await ctx.reply('ℹ️ У вас нет привязанного ПК');
     return;
   }
   
   try {
-    const response = await axios.get(`${CLOUDFLARE_WORKER_URL}/api/users/stats`);
-    if (response.data.ok) {
-      const stats = response.data;
-      await ctx.reply(
-        `📊 Статистика:\n\n` +
-        `👥 Пользователей: ${stats.totalUsers}\n` +
-        `🖥️ Устройств: ${stats.totalDevices}\n` +
-        `🟢 Онлайн: ${stats.onlineDevices}\n` +
-        `🔴 Офлайн: ${stats.offlineDevices}`
-      );
-    }
-  } catch (error) {
-    await ctx.reply(`❌ Ошибка: ${error.message}`);
+    await axios.delete(`${WORKER_URL}/api/user/${userId}/unlink`);
+    await ctx.reply('✅ ПК отвязан');
+  } catch (e) {
+    await ctx.reply('❌ Ошибка: ' + e.response?.data?.error || e.message);
   }
 });
 
-// Error handling
+bot.command('stats', async (ctx) => {
+  if (ctx.from?.id !== ADMIN_CHAT_ID) {
+    await ctx.reply('❌ Только для админа');
+    return;
+  }
+  
+  try {
+    const res = await axios.get(`${WORKER_URL}/api/users/stats`);
+    const s = res.data;
+    await ctx.reply(
+      `📊 <b>Статистика</b>\n\n` +
+      `👥 Пользователей: ${s.totalUsers}\n` +
+      `🖥️ Устройств: ${s.totalDevices}\n` +
+      `🟢 Онлайн: ${s.onlineDevices}\n` +
+      `🔴 Офлайн: ${s.offlineDevices}`,
+      { parse_mode: 'HTML' }
+    );
+  } catch (e) {
+    await ctx.reply('❌ Ошибка: ' + e.message);
+  }
+});
+
+bot.command('help', async (ctx) => {
+  await ctx.reply(
+    `📖 <b>Справка</b>\n\n` +
+    `<b>Команды:</b>\n` +
+    `/start - Главное меню\n` +
+    `/connect DEVICE_ID - Подключить ПК\n` +
+    `/unbind - Отвязать ПК\n` +
+    `/stats - Статистика (админ)\n` +
+    `/help - Эта справка\n\n` +
+    `<b>Кнопки:</b>\n` +
+    '⚡ Рестарт, 💤 Сон, ⏹️ Выключить, 🔒 Блокировка, 📊 Статус`,
+    { parse_mode: 'HTML' }
+  );
+});
+
+// ==================== CALLBACKS ====================
+
+bot.on('callback_query', async (ctx) => {
+  const userId = ctx.from?.id;
+  const data = ctx.callbackQuery?.data;
+  
+  console.log(`[callback] User ${userId}, Action ${data}`);
+  
+  const userDevice = await getUserDevice(userId);
+  if (!userDevice.linked) {
+    await ctx.answerCbQuery('❌ Сначала /connect');
+    return;
+  }
+  
+  const deviceId = userDevice.deviceId;
+  let result;
+  
+  switch (data) {
+    case 'restart':
+      result = await sendCommand(deviceId, 'restart');
+      if (result.ok) await ctx.reply('⚡ Перезагрузка...');
+      else await ctx.reply('❌ ' + result.error);
+      break;
+      
+    case 'sleep':
+      result = await sendCommand(deviceId, 'sleep');
+      if (result.ok) await ctx.reply('💤 Спящий режим...');
+      else await ctx.reply('❌ ' + result.error);
+      break;
+      
+    case 'shutdown':
+      result = await sendCommand(deviceId, 'shutdown');
+      if (result.ok) await ctx.reply('⏹️ Выключение...');
+      else await ctx.reply('❌ ' + result.error);
+      break;
+      
+    case 'lock':
+      result = await sendCommand(deviceId, 'lock');
+      if (result.ok) await ctx.reply('🔒 Заблокировано');
+      else await ctx.reply('❌ ' + result.error);
+      break;
+      
+    case 'stats':
+      const status = await getDeviceStatus(deviceId);
+      if (status) {
+        await ctx.reply(
+          `📊 <b>Статус</b>\n\n` +
+          `💻 ПК: ${status.hostname || deviceId}\n` +
+          `🔋 Батарея: ${status.batteryLevel || 'N/A'}%\n` +
+          `⚡ CPU: ${status.cpuUsage || 'N/A'}%\n` +
+          `🧠 RAM: ${status.ramUsed || 'N/A'} GB`,
+          { parse_mode: 'HTML' }
+        );
+      } else {
+        await ctx.reply('❌ Не удалось получить статус');
+      }
+      break;
+      
+    case 'unbind':
+      try {
+        await axios.delete(`${WORKER_URL}/api/user/${userId}/unlink`);
+        await ctx.reply('✅ ПК отвязан');
+      } catch (e) {
+        await ctx.reply('❌ Ошибка: ' + e.message);
+      }
+      break;
+      
+    case 'help':
+      await ctx.answerCbQuery('📲 Отправьте /connect DEVICE_ID');
+      return;
+      
+    default:
+      await ctx.answerCbQuery('❓ Неизвестно');
+      return;
+  }
+  
+  await ctx.answerCbQuery();
+});
+
+// ==================== ERROR HANDLING ====================
+
 bot.catch((err) => {
   console.error('🚨 Bot error:', err);
 });
 
-// Graceful shutdown
 process.on('SIGINT', () => {
-  console.log('\n✋ Bot stopping...');
+  console.log('\n✋ Stopping...');
   bot.stop('SIGINT');
   setTimeout(() => process.exit(0), 1000);
 });
 
 process.on('SIGTERM', () => {
-  console.log('\n✋ Bot stopping...');
+  console.log('\n✋ Stopping...');
   bot.stop('SIGTERM');
   setTimeout(() => process.exit(0), 1000);
 });
 
-// Launch
+// ==================== LAUNCH ====================
+
 bot.launch().then(() => {
-  console.log('✅ Bot started successfully');
-  console.log(`📍 Worker URL: ${CLOUDFLARE_WORKER_URL}`);
-  console.log(`👤 Admin Chat ID: ${ADMIN_CHAT_ID}`);
-  console.log('🤖 Polling for messages...');
+  console.log('✅ Bot started!');
+  console.log(`📍 Worker: ${WORKER_URL}`);
+  console.log(`👤 Admin: ${ADMIN_CHAT_ID}`);
+  console.log('🤖 Polling...');
 }).catch(err => {
-  console.error('❌ Failed to launch bot:', err.message);
+  console.error('❌ Failed:', err.message);
   process.exit(1);
 });
