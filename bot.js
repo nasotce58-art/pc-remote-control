@@ -1,6 +1,6 @@
 /**
- * PC Remote Control - Telegram Bot
- * Полностью переписанная версия
+ * PC Remote Control - Telegram Bot v2.0
+ * Полная версия со всеми функциями
  */
 
 require('dotenv').config();
@@ -58,53 +58,60 @@ async function sendCommand(deviceId, command, argument = null) {
 
 bot.start(async (ctx) => {
   const userId = ctx.from?.id;
-  console.log(`[/start] User ${userId}`);
+  const username = ctx.from?.username || 'unknown';
+  
+  console.log(`[/start] User ${userId} (@${username})`);
   
   const userDevice = await getUserDevice(userId);
   
   if (userDevice.linked && userDevice.deviceId) {
-    const status = await getDeviceStatus(userDevice.deviceId);
+    // Device is linked - show dashboard
+    const deviceId = userDevice.deviceId;
+    const status = await getDeviceStatus(deviceId);
     const statusText = status?.status === 'online' ? '🟢 Online' : '🔴 Offline';
+    
+    const now = new Date();
+    const timeStr = now.toLocaleString('ru-RU');
     
     await ctx.reply(
       `🖥️ <b>PC Remote Control</b>\n\n` +
-      `Статус: ${statusText}\n` +
-      `Устройство: ${userDevice.deviceId}\n\n` +
+      `Статус на ${timeStr}\n` +
+      `${statusText}\n\n` +
+      `Устройство: ${deviceId}\n\n` +
       `Выберите действие:`,
       {
         parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [
             [
-              { text: '⚡ Рестарт', callback_data: 'restart' },
-              { text: '💤 Сон', callback_data: 'sleep' }
+              { text: '⚡ Вкл (Рестарт)', callback_data: 'restart_pc' },
+              { text: '💤 Выкл (Сон)', callback_data: 'sleep_pc' }
             ],
             [
-              { text: '⏹️ Выключить', callback_data: 'shutdown' },
-              { text: '🔒 Блокировка', callback_data: 'lock' }
+              { text: '⏹️ Принудительное выключение', callback_data: 'force_shutdown_pc' }
             ],
             [
-              { text: '📊 Статус', callback_data: 'stats' },
-              { text: '🔌 Отвязать', callback_data: 'unbind' }
+              { text: '⏰ Пробуждение из сна', callback_data: 'wake_pc' }
+            ],
+            [
+              { text: '⚙️ Доп. функции', callback_data: 'settings_menu' }
             ]
           ]
         }
       }
     );
   } else {
+    // Device is not linked
     await ctx.reply(
-      `👋 <b>Добро пожаловать!</b>\n\n` +
-      `У вас нет привязанного ПК.\n\n` +
-      `Для подключения:\n` +
-      `1. Откройте приложение на ПК\n` +
-      `2. Скопируйте Device ID\n` +
-      `3. Отправьте: <code>/connect DEVICE_ID</code>\n\n` +
-      `Пример: <code>/connect ABCD-1234</code>`,
+      `❌ <b>У вас ещё нет привязанного ПК</b>\n\n` +
+      `Для подключения введите ваш Device ID из приложения:\n` +
+      `<code>/connect DEVICE_ID</code>\n\n` +
+      `Пример: <code>/connect X7K9-LP21</code>`,
       {
         parse_mode: 'HTML',
         reply_markup: {
           inline_keyboard: [
-            [{ text: '❓ Помощь', callback_data: 'help' }]
+            [{ text: '❓ Помощь', callback_data: 'help_connect' }]
           ]
         }
       }
@@ -114,28 +121,42 @@ bot.start(async (ctx) => {
 
 bot.command('connect', async (ctx) => {
   const userId = ctx.from?.id;
-  const deviceId = ctx.message.text.split(' ')[1]?.toUpperCase();
+  const username = ctx.from?.username || 'unknown';
+  const args = ctx.message.text.split(' ');
+  const deviceId = args[1]?.toUpperCase();
   
-  console.log(`[/connect] User ${userId}, Device ${deviceId}`);
+  console.log(`[/connect] User ${userId} (@${username}), Device ${deviceId}`);
   
-  if (!deviceId) {
-    await ctx.reply('❌ Использование: /connect DEVICE_ID\nПример: /connect ABCD-1234');
+  if (!deviceId || deviceId.length < 5) {
+    await ctx.reply('❌ Неверный формат. Используйте: /connect DEVICE_ID\nПример: /connect X7K9-LP21');
+    return;
+  }
+  
+  // Check if user already has device
+  const userDevice = await getUserDevice(userId);
+  if (userDevice.linked) {
+    await ctx.reply(`⚠️ У вас уже есть привязанный ПК: ${userDevice.deviceId}\n\nСначала отвяжитесь командой /unbind`);
     return;
   }
   
   // Check if device exists
   const deviceStatus = await getDeviceStatus(deviceId);
   if (!deviceStatus) {
-    await ctx.reply('❌ Устройство не найдено. Проверьте Device ID.');
+    await ctx.reply('❌ Устройство не найдено. Проверьте Device ID и убедитесь что приложение запущено.');
     return;
   }
   
   // Link user to device
   try {
     await axios.post(`${WORKER_URL}/api/user/${userId}/link/${deviceId}`);
-    await ctx.reply(`✅ ПК <b>${deviceId}</b> подключен!`, { parse_mode: 'HTML' });
+    await ctx.reply(
+      `✅ <b>Подключение выполнено!</b>\n\n` +
+      `Теперь вы можете управлять этим ПК.\n\n` +
+      `Отправьте /start для открытия панели управления.`,
+      { parse_mode: 'HTML' }
+    );
   } catch (e) {
-    await ctx.reply('❌ Ошибка подключения: ' + e.response?.data?.error || e.message);
+    await ctx.reply('❌ Ошибка подключения: ' + (e.response?.data?.error || e.message));
   }
 });
 
@@ -151,9 +172,9 @@ bot.command('unbind', async (ctx) => {
   
   try {
     await axios.delete(`${WORKER_URL}/api/user/${userId}/unlink`);
-    await ctx.reply('✅ ПК отвязан');
+    await ctx.reply('✅ ПК отвязан. Отправьте /connect DEVICE_ID для подключения нового.');
   } catch (e) {
-    await ctx.reply('❌ Ошибка: ' + e.response?.data?.error || e.message);
+    await ctx.reply('❌ Ошибка: ' + (e.response?.data?.error || e.message));
   }
 });
 
@@ -181,15 +202,19 @@ bot.command('stats', async (ctx) => {
 
 bot.command('help', async (ctx) => {
   await ctx.reply(
-    `📖 <b>Справка</b>\n\n` +
+    `📖 <b>Справка PC Remote Control</b>\n\n` +
     `<b>Команды:</b>\n` +
     `/start - Главное меню\n` +
     `/connect DEVICE_ID - Подключить ПК\n` +
     `/unbind - Отвязать ПК\n` +
     `/stats - Статистика (админ)\n` +
     `/help - Эта справка\n\n` +
-    `<b>Кнопки:</b>\n` +
-    `⚡ Рестарт, 💤 Сон, ⏹️ Выключить, 🔒 Блокировка, 📊 Статус`,
+    `<b>Как подключить:</b>\n` +
+    `1. Откройте приложение на ПК\n` +
+    `2. Скопируйте Device ID\n` +
+    `3. Отправьте: /connect DEVICE_ID\n` +
+    `4. Подтвердите на ПК\n` +
+    `5. Готово!`,
     { parse_mode: 'HTML' }
   );
 });
@@ -204,7 +229,7 @@ bot.on('callback_query', async (ctx) => {
   
   const userDevice = await getUserDevice(userId);
   if (!userDevice.linked) {
-    await ctx.answerCbQuery('❌ Сначала /connect');
+    await ctx.answerCbQuery('❌ Сначала подключите ПК: /connect DEVICE_ID');
     return;
   }
   
@@ -212,39 +237,160 @@ bot.on('callback_query', async (ctx) => {
   let result;
   
   switch (data) {
-    case 'restart':
+    // Power commands
+    case 'restart_pc':
       result = await sendCommand(deviceId, 'restart');
-      if (result.ok) await ctx.reply('⚡ Перезагрузка...');
+      if (result.ok) await ctx.reply('⚡ ПК перезагружается...');
       else await ctx.reply('❌ ' + result.error);
       break;
       
-    case 'sleep':
+    case 'sleep_pc':
       result = await sendCommand(deviceId, 'sleep');
-      if (result.ok) await ctx.reply('💤 Спящий режим...');
+      if (result.ok) await ctx.reply('💤 ПК переходит в спящий режим...');
       else await ctx.reply('❌ ' + result.error);
       break;
       
-    case 'shutdown':
+    case 'force_shutdown_pc':
+      result = await sendCommand(deviceId, 'shutdown', { force: true });
+      if (result.ok) await ctx.reply('⏹️ Принудительное выключение...');
+      else await ctx.reply('❌ ' + result.error);
+      break;
+      
+    case 'wake_pc':
+      result = await sendCommand(deviceId, 'wake');
+      if (result.ok) await ctx.reply('⏰ Пробуждение...');
+      else await ctx.reply('❌ ' + result.error);
+      break;
+      
+    case 'settings_menu':
+      await ctx.editMessageText(
+        '⚙️ <b>Дополнительные функции</b>\n\nВыберите раздел:',
+        {
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '🔌 Питание и сеть', callback_data: 'section_power' }],
+              [{ text: '📊 Мониторинг и экран', callback_data: 'section_monitoring' }],
+              [{ text: '📂 Файлы и приложения', callback_data: 'section_files' }],
+              [{ text: '⌨ Управление и ввод', callback_data: 'section_control' }],
+              [{ text: '⚙️ Настройки', callback_data: 'section_settings' }],
+              [{ text: '🔙 Назад', callback_data: 'back_to_menu' }]
+            ]
+          }
+        }
+      );
+      break;
+      
+    // Sections
+    case 'section_power':
+      await ctx.editMessageText(
+        '🔌 <b>Питание и сеть</b>',
+        {
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '🖥️ Монитор Вкл/Выкл', callback_data: 'cmd_monitor_toggle' }],
+              [{ text: '🔒 Блокировка', callback_data: 'lock_pc' }],
+              [{ text: '⏳ Таймер выключения', callback_data: 'shutdown_timer' }],
+              [{ text: '💤 Спящий режим', callback_data: 'sleep_pc' }],
+              [{ text: '🔄 Перезагрузка', callback_data: 'restart_pc' }],
+              [{ text: '⛔ Выключить', callback_data: 'shutdown_pc' }],
+              [{ text: '🔙 Назад', callback_data: 'settings_menu' }]
+            ]
+          }
+        }
+      );
+      break;
+      
+    case 'section_monitoring':
+      await ctx.editMessageText(
+        '📊 <b>Мониторинг и экран</b>',
+        {
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '📈 Статус системы', callback_data: 'system_stats' }],
+              [{ text: '📸 Скриншот', callback_data: 'screenshot' }],
+              [{ text: '📋 Процессы', callback_data: 'process_list' }],
+              [{ text: '🔙 Назад', callback_data: 'settings_menu' }]
+            ]
+          }
+        }
+      );
+      break;
+      
+    case 'section_files':
+      await ctx.editMessageText(
+        '📂 <b>Файлы и приложения</b>\n\nВ разработке...',
+        {
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '🚀 Запуск программ', callback_data: 'launch_app' }],
+              [{ text: '🔎 Поиск файлов', callback_data: 'search_files' }],
+              [{ text: '🔙 Назад', callback_data: 'settings_menu' }]
+            ]
+          }
+        }
+      );
+      break;
+      
+    case 'section_control':
+      await ctx.editMessageText(
+        '⌨ <b>Управление и ввод</b>\n\nВ разработке...',
+        {
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '📋 Буфер обмена', callback_data: 'clipboard' }],
+              [{ text: '🔊 Громкость', callback_data: 'volume' }],
+              [{ text: '💻 Терминал', callback_data: 'terminal' }],
+              [{ text: '🔙 Назад', callback_data: 'settings_menu' }]
+            ]
+          }
+        }
+      );
+      break;
+      
+    case 'section_settings':
+      await ctx.editMessageText(
+        '⚙️ <b>Настройки</b>',
+        {
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '🔔 Уведомления', callback_data: 'notifications' }],
+              [{ text: 'ℹ️ О программе', callback_data: 'about' }],
+              [{ text: '🔙 Назад', callback_data: 'settings_menu' }]
+            ]
+          }
+        }
+      );
+      break;
+      
+    // Power commands from sections
+    case 'shutdown_pc':
       result = await sendCommand(deviceId, 'shutdown');
-      if (result.ok) await ctx.reply('⏹️ Выключение...');
+      if (result.ok) await ctx.reply('⏹️ ПК выключается...');
       else await ctx.reply('❌ ' + result.error);
       break;
       
-    case 'lock':
+    case 'lock_pc':
       result = await sendCommand(deviceId, 'lock');
-      if (result.ok) await ctx.reply('🔒 Заблокировано');
+      if (result.ok) await ctx.reply('🔒 ПК заблокирован');
       else await ctx.reply('❌ ' + result.error);
       break;
       
-    case 'stats':
+    case 'system_stats':
       const status = await getDeviceStatus(deviceId);
       if (status) {
         await ctx.reply(
-          `📊 <b>Статус</b>\n\n` +
+          `📊 <b>Статус системы</b>\n\n` +
           `💻 ПК: ${status.hostname || deviceId}\n` +
           `🔋 Батарея: ${status.batteryLevel || 'N/A'}%\n` +
           `⚡ CPU: ${status.cpuUsage || 'N/A'}%\n` +
-          `🧠 RAM: ${status.ramUsed || 'N/A'} GB`,
+          `🧠 RAM: ${status.ramUsed || 'N/A'} / ${status.ramTotal || 'N/A'} GB\n` +
+          `📶 Сеть: ${status.networkName || 'N/A'}`,
           { parse_mode: 'HTML' }
         );
       } else {
@@ -252,21 +398,60 @@ bot.on('callback_query', async (ctx) => {
       }
       break;
       
-    case 'unbind':
-      try {
-        await axios.delete(`${WORKER_URL}/api/user/${userId}/unlink`);
-        await ctx.reply('✅ ПК отвязан');
-      } catch (e) {
-        await ctx.reply('❌ Ошибка: ' + e.message);
-      }
+    case 'back_to_menu':
+      // Send new dashboard message
+      const newStatus = await getDeviceStatus(deviceId);
+      const newStatusText = newStatus?.status === 'online' ? '🟢 Online' : '🔴 Offline';
+      
+      await ctx.reply(
+        `🖥️ <b>PC Remote Control</b>\n\n` +
+        `Статус: ${newStatusText}\n` +
+        `Устройство: ${deviceId}\n\n` +
+        `Выберите действие:`,
+        {
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '⚡ Вкл (Рестарт)', callback_data: 'restart_pc' },
+                { text: '💤 Выкл (Сон)', callback_data: 'sleep_pc' }
+              ],
+              [
+                { text: '⏹️ Принудительное выключение', callback_data: 'force_shutdown_pc' }
+              ],
+              [
+                { text: '⏰ Пробуждение из сна', callback_data: 'wake_pc' }
+              ],
+              [
+                { text: '⚙️ Доп. функции', callback_data: 'settings_menu' }
+              ]
+            ]
+          }
+        }
+      );
       break;
       
-    case 'help':
+    // Placeholders
+    case 'help_connect':
       await ctx.answerCbQuery('📲 Отправьте /connect DEVICE_ID');
       return;
       
+    case 'notifications':
+    case 'about':
+    case 'launch_app':
+    case 'search_files':
+    case 'clipboard':
+    case 'volume':
+    case 'terminal':
+    case 'screenshot':
+    case 'process_list':
+    case 'shutdown_timer':
+    case 'cmd_monitor_toggle':
+      await ctx.answerCbQuery('⏳ В разработке...');
+      return;
+      
     default:
-      await ctx.answerCbQuery('❓ Неизвестно');
+      await ctx.answerCbQuery('❓ Неизвестное действие');
       return;
   }
   
