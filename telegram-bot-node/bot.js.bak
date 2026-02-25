@@ -1,0 +1,788 @@
+require('dotenv').config();
+const { Telegraf } = require('telegraf');
+const axios = require('axios');
+
+// Import modular functions
+const { registerPowerControlHandlers } = require('./functions/power-control');
+const { registerMonitoringHandlers, handleTextInputForProcessKill } = require('./functions/monitoring');
+
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const CLOUDFLARE_WORKER_URL = process.env.CLOUDFLARE_WORKER_URL;
+const ADMIN_CHAT_ID = parseInt(process.env.ADMIN_CHAT_ID);
+
+if (!BOT_TOKEN) {
+  console.error('ERROR: BOT_TOKEN not set in .env');
+  process.exit(1);
+}
+
+if (!CLOUDFLARE_WORKER_URL) {
+  console.error('ERROR: CLOUDFLARE_WORKER_URL not set in .env');
+  process.exit(1);
+}
+
+const bot = new Telegraf(BOT_TOKEN);
+
+console.log('🤖 Bot instance created');
+
+// Register modular function handlers
+try {
+  registerPowerControlHandlers(bot, CLOUDFLARE_WORKER_URL);
+  console.log('✅ Power control handlers registered');
+} catch (error) {
+  console.error('❌ Error registering power control handlers:', error);
+  process.exit(1);
+}
+
+try {
+  registerMonitoringHandlers(bot, CLOUDFLARE_WORKER_URL);
+  console.log('✅ Monitoring handlers registered');
+} catch (error) {
+  console.error('❌ Error registering monitoring handlers:', error);
+  process.exit(1);
+}
+
+// Separator button handlers (for menu separation lines)
+bot.action(/^sep[0-9]$/, async (ctx) => {
+  await ctx.answerCbQuery('');
+});
+
+// Middleware to log all updates
+bot.use((ctx, next) => {
+  console.log(`Update type: ${ctx.updateType}, from: ${ctx.from?.id} ${ctx.from?.first_name}`);
+  return next();
+});
+
+// Command: /start
+bot.start(async (ctx) => {
+  const userId = ctx.from?.id;
+  
+  console.log(`[/start] User ID: ${userId}`);
+
+  try {
+    // Check if user has linked device via Worker API
+    const checkDeviceResponse = await axios.get(`${CLOUDFLARE_WORKER_URL}/api/user/${userId}/device`);
+    const { linked, deviceId } = checkDeviceResponse.data;
+
+    if (linked && deviceId) {
+      // Device is linked
+      console.log(`[/start] User ${userId} has device: ${deviceId}`);
+      
+      // Get current time
+      const now = new Date();
+      const timeStr = now.toLocaleString('ru-RU', { 
+        year: 'numeric', 
+        month: '2-digit', 
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      
+      const statusMessage = `Здравствуйте, выберите действие пожалуйста\n\nСтатус ПК на ${timeStr}
+🖥️ Статус ПК: Online
+🧠 ОЗУ: X / Y GB
+🔋 Батарея: X%
+📶 Сеть: Connected
+🖥️ GPU/CPU: X% / X%`;
+      
+      await ctx.reply(statusMessage, {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: '⚡ Вкл (Рестарт)', callback_data: 'restart_pc' },
+              { text: '💤 Выкл (Сон)', callback_data: 'sleep_pc' }
+            ],
+            [{ text: '⏹️ Принудительное выключение', callback_data: 'force_shutdown_pc' }],
+            [{ text: '⏰ Пробуждение из сна', callback_data: 'wake_pc' }],
+            [{ text: '⚙️ Доп. функции', callback_data: 'settings_menu' }]
+          ]
+        }
+      });
+    } else {
+      // Device is not linked
+      console.log(`[/start] User ${userId} has no device linked`);
+      
+      await ctx.reply(
+        '❌ ПК не подключён\n\nНажмите кнопку ниже, чтобы подключить ПК к боту.',
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '🔗 Подключить ПК', callback_data: 'connect_pc' }]
+            ]
+          }
+        }
+      );
+    }
+  } catch (error) {
+    console.error('[/start] Error checking device:', error.message);
+    
+    await ctx.reply(
+      '⚠️ Ошибка подключения к серверу.\n\nПопробуйте позже.',
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🔗 Подключить ПК', callback_data: 'connect_pc' }]
+          ]
+        }
+      }
+    );
+  }
+});
+
+// Handler: callback_query for all button actions
+bot.on('callback_query', async (ctx) => {
+  const userId = ctx.from?.id;
+  const callbackData = ctx.callbackQuery?.data;
+
+  console.log(`[callback] User: ${userId}, Action: ${callbackData}`);
+
+  try {
+    if (callbackData === 'connect_pc') {
+      await handleConnectPC(ctx, userId);
+    } else if (callbackData === 'status_pc') {
+      await handleStatusPC(ctx, userId);
+    } else if (callbackData === 'disconnect_pc') {
+      await handleDisconnectPC(ctx, userId);
+    } else if (callbackData === 'restart_pc') {
+      await handleRestartPC(ctx, userId);
+    } else if (callbackData === 'sleep_pc') {
+      await handleSleepPC(ctx, userId);
+    } else if (callbackData === 'force_shutdown_pc') {
+      await handleForceShutdownPC(ctx, userId);
+    } else if (callbackData === 'wake_pc') {
+      await handleWakePC(ctx, userId);
+    } else if (callbackData === 'settings_menu') {
+      await handleSettingsMenu(ctx, userId);
+    } else if (callbackData === 'back_to_menu') {
+      await handleBackToMenu(ctx, userId);
+    } else if (callbackData === 'monitor_toggle') {
+      await handleMonitorToggle(ctx, userId);
+    } else if (callbackData === 'lock_pc') {
+      await handleLockPC(ctx, userId);
+    } else if (callbackData === 'shutdown_timer') {
+      await handleShutdownTimer(ctx, userId);
+    } else if (callbackData === 'sleep_pc_menu') {
+      await handleSleepPC(ctx, userId);
+    } else if (callbackData === 'restart_pc_menu') {
+      await handleRestartPC(ctx, userId);
+    } else if (callbackData === 'shutdown_pc_menu') {
+      await handleShutdownPC(ctx, userId);
+    } else if (callbackData === 'timer_30min') {
+      await handleTimerSelection(ctx, userId, 30);
+    } else if (callbackData === 'timer_60min') {
+      await handleTimerSelection(ctx, userId, 60);
+    } else if (callbackData === 'timer_120min') {
+      await handleTimerSelection(ctx, userId, 120);
+    } else {
+      await ctx.answerCbQuery('❓ Неизвестное действие');
+    }
+  } catch (error) {
+    console.error('[callback] Error:', error.message);
+    await ctx.answerCbQuery('⚠️ Ошибка обработки');
+  }
+});
+
+// Function: Connect PC
+async function handleConnectPC(ctx, userId) {
+  console.log(`[connectPC] Starting pairing for user ${userId}`);
+
+  const pairingInstructions = `
+📲 Инструкция подключения:
+
+1. Установите ПК-клиент на компьютер
+2. При первом запуске скопируйте Device ID
+3. Отправьте мне Device ID в формате:
+   /pair DEVICE_ID
+
+Пример:
+/pair abc123def456
+`;
+
+  await ctx.reply(pairingInstructions);
+  await ctx.answerCbQuery('✅ Инструкция отправлена');
+}
+
+// Function: Restart PC
+async function handleRestartPC(ctx, userId) {
+  console.log(`[restartPC] Sending restart command for user ${userId}`);
+
+  try {
+    // Get user's device ID
+    const checkDeviceResponse = await axios.get(`${CLOUDFLARE_WORKER_URL}/api/user/${userId}/device`);
+    const { deviceId } = checkDeviceResponse.data;
+
+    if (!deviceId) {
+      await ctx.reply('❌ ПК не подключён');
+      await ctx.answerCbQuery();
+      return;
+    }
+
+    // Send restart command to Worker
+    const commandResponse = await axios.post(
+      `${CLOUDFLARE_WORKER_URL}/api/commands/${deviceId}`,
+      {
+        command: 'restart',
+        argument: null
+      }
+    );
+
+    if (commandResponse.data.ok) {
+      console.log(`[restartPC] Command recorded: ${commandResponse.data.commandId}`);
+      await ctx.reply('✅ Команда отправлена на ПК\n\n⏳ ПК будет перезагружен через несколько секунд...');
+      await ctx.answerCbQuery('✅ Команда записана');
+    } else {
+      await ctx.reply(`❌ Ошибка: ${commandResponse.data.error}`);
+      await ctx.answerCbQuery('⚠️ Ошибка отправки');
+    }
+  } catch (error) {
+    console.error('[restartPC] Error:', error.message);
+    
+    if (error.response?.status === 404) {
+      await ctx.reply('❌ ПК не найден');
+    } else {
+      await ctx.reply('⚠️ Ошибка подключения к серверу');
+    }
+    await ctx.answerCbQuery('⚠️ Ошибка');
+  }
+}
+
+// Function: Sleep PC
+async function handleSleepPC(ctx, userId) {
+  console.log(`[sleepPC] Sending sleep command for user ${userId}`);
+
+  try {
+    // Get user's device ID
+    const checkDeviceResponse = await axios.get(`${CLOUDFLARE_WORKER_URL}/api/user/${userId}/device`);
+    const { deviceId } = checkDeviceResponse.data;
+
+    if (!deviceId) {
+      await ctx.reply('❌ ПК не подключён');
+      await ctx.answerCbQuery();
+      return;
+    }
+
+    // Send sleep command to Worker
+    const commandResponse = await axios.post(
+      `${CLOUDFLARE_WORKER_URL}/api/commands/${deviceId}`,
+      {
+        command: 'sleep',
+        argument: null
+      }
+    );
+
+    if (commandResponse.data.ok) {
+      console.log(`[sleepPC] Command recorded: ${commandResponse.data.commandId}`);
+      await ctx.reply('✅ Команда отправлена на ПК\n\n⏳ ПК перейдет в режим сна через несколько секунд...');
+      await ctx.answerCbQuery('✅ Команда записана');
+    } else {
+      await ctx.reply(`❌ Ошибка: ${commandResponse.data.error}`);
+      await ctx.answerCbQuery('⚠️ Ошибка отправки');
+    }
+  } catch (error) {
+    console.error('[sleepPC] Error:', error.message);
+    
+    if (error.response?.status === 404) {
+      await ctx.reply('❌ ПК не найден');
+    } else {
+      await ctx.reply('⚠️ Ошибка подключения к серверу');
+    }
+    await ctx.answerCbQuery('⚠️ Ошибка');
+  }
+}
+
+// Function: Get PC Status
+async function handleStatusPC(ctx, userId) {
+  console.log(`[statusPC] Getting status for user ${userId}`);
+
+  try {
+    const checkDeviceResponse = await axios.get(`${CLOUDFLARE_WORKER_URL}/api/user/${userId}/device`);
+    const { deviceId } = checkDeviceResponse.data;
+
+    if (deviceId) {
+      // In future: fetch actual PC status from DEVICES_KV
+      const statusMessage = `
+📊 Статус ПК:
+━━━━━━━━━━━━━━━━━
+🆔 Device ID: ${deviceId}
+✅ Статус: Ожидание подключения
+💾 ОЗУ: —
+🔋 Батарея: —
+🌐 Сеть: —
+`;
+      await ctx.reply(statusMessage);
+    } else {
+      await ctx.reply('❌ ПК не подключён');
+    }
+  } catch (error) {
+    console.error('[statusPC] Error:', error.message);
+    await ctx.reply('⚠️ Ошибка получения статуса');
+  }
+
+  await ctx.answerCbQuery();
+}
+
+// Function: Disconnect PC
+async function handleDisconnectPC(ctx, userId) {
+  console.log(`[disconnectPC] Disconnecting device for user ${userId}`);
+
+  try {
+    // TODO: Implement actual disconnection in KV
+    await ctx.reply('⚠️ ПК отключен от аккаунта');
+    
+    // Re-show main menu after disconnect
+    await ctx.reply(
+      '❌ ПК не подключён\n\nНажмите кнопку ниже, чтобы подключить ПК к боту.',
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🔗 Подключить ПК', callback_data: 'connect_pc' }]
+          ]
+        }
+      }
+    );
+  } catch (error) {
+    console.error('[disconnectPC] Error:', error.message);
+    await ctx.reply('⚠️ Ошибка отключения');
+  }
+
+  await ctx.answerCbQuery();
+}
+
+// Command: /pair (for manual pairing with device ID)
+bot.command('pair', async (ctx) => {
+  const userId = ctx.from?.id;
+  const args = ctx.payload;
+
+  console.log(`[/pair] User: ${userId}, Device ID: ${args}`);
+
+  if (!args || args.length < 5) {
+    await ctx.reply('❌ Неверный формат. Использование: /pair DEVICE_ID');
+    return;
+  }
+
+  try {
+    // Link user to device via Worker API
+    const linkResponse = await axios.post(
+      `${CLOUDFLARE_WORKER_URL}/api/user/${userId}/link/${args}`
+    );
+
+    if (linkResponse.data.ok) {
+      console.log(`[/pair] Successfully linked user ${userId} to device ${args}`);
+      
+      await ctx.reply(
+        `✅ ПК успешно подключён!\n\nDevice ID: ${args}`,
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '⚡ Вкл (Рестарт)', callback_data: 'restart_pc' }],
+              [{ text: '� Выкл (Сон)', callback_data: 'sleep_pc' }],
+              [{ text: '�📊 Статус ПК', callback_data: 'status_pc' }],
+              [{ text: '🔌 Отключить ПК', callback_data: 'disconnect_pc' }]
+            ]
+          }
+        }
+      );
+    } else {
+      await ctx.reply(`❌ Ошибка: ${linkResponse.data.error}`);
+    }
+  } catch (error) {
+    console.error('[/pair] Error:', error.message);
+    
+    if (error.response?.status === 404) {
+      await ctx.reply('❌ Device ID не найден. Проверьте корректность ID.');
+    } else {
+      await ctx.reply('⚠️ Ошибка подключения к серверу. Попробуйте позже.');
+    }
+  }
+});
+
+// Function: Force Shutdown PC
+async function handleForceShutdownPC(ctx, userId) {
+  try {
+    const responseData = await axios.get(
+      `${CLOUDFLARE_WORKER_URL}/api/user/${userId}/device`,
+      {
+        headers: { Authorization: `Bearer ${BOT_TOKEN}` }
+      }
+    );
+
+    const deviceId = responseData.data.deviceId;
+
+    await axios.post(
+      `${CLOUDFLARE_WORKER_URL}/api/commands/${deviceId}`,
+      { command: 'force_shutdown', argument: null },
+      {
+        headers: { Authorization: `Bearer ${BOT_TOKEN}` }
+      }
+    );
+
+    await ctx.reply('⏹️ ПК выключится принудительно через несколько секунд...');
+  } catch (error) {
+    console.error('Error sending force shutdown command:', error.message);
+    await ctx.reply('❌ ПК не найден');
+  }
+}
+
+// Function: Wake PC
+async function handleWakePC(ctx, userId) {
+  try {
+    const responseData = await axios.get(
+      `${CLOUDFLARE_WORKER_URL}/api/user/${userId}/device`,
+      {
+        headers: { Authorization: `Bearer ${BOT_TOKEN}` }
+      }
+    );
+
+    const deviceId = responseData.data.deviceId;
+
+    await axios.post(
+      `${CLOUDFLARE_WORKER_URL}/api/commands/${deviceId}`,
+      { command: 'wake', argument: null },
+      {
+        headers: { Authorization: `Bearer ${BOT_TOKEN}` }
+      }
+    );
+
+    await ctx.reply('⏰ ПК пробудится из сна...');
+  } catch (error) {
+    console.error('Error sending wake command:', error.message);
+    await ctx.reply('❌ ПК не найден');
+  }
+}
+
+// Function: Settings Menu
+async function handleSettingsMenu(ctx, userId) {
+  const settingsMessage = `⚙️ Дополнительные функции
+
+1️⃣ ⚡ Питание и сеть
+2️⃣ 📊 Мониторинг и экран`;
+
+  await ctx.reply(settingsMessage, {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: '� Монитор', callback_data: 'monitor_toggle' },
+          { text: '🔒 Блокировка', callback_data: 'lock_pc' }
+        ],
+        [
+          { text: '⏱️ Таймер', callback_data: 'shutdown_timer' },
+          { text: '💤 Спящий режим', callback_data: 'sleep_pc_menu' }
+        ],
+        [
+          { text: '⚡ Перезагрузка', callback_data: 'restart_pc_menu' },
+          { text: '⏹️ Выключить', callback_data: 'shutdown_pc_menu' }
+        ],
+        [{ text: '━━━━━━━━━━━━━━━━━', callback_data: 'sep1' }],
+        [
+          { text: '📈 Статистика', callback_data: 'system_stats' },
+          { text: '� Скриншот', callback_data: 'screenshot' }
+        ],
+        [
+          { text: '📷 Веб-камера', callback_data: 'webcam_photo' },
+          { text: '⚙️ Процессы', callback_data: 'process_list' }
+        ],
+        [{ text: '━━━━━━━━━━━━━━━━━', callback_data: 'sep2' }],
+        [{ text: '�🔌 Отключить от бота', callback_data: 'disconnect_pc' }],
+        [{ text: '📊 Показать статус', callback_data: 'status_pc' }],
+        [{ text: '◀️ Вернуться в меню', callback_data: 'back_to_menu' }]
+      ]
+    }
+  });
+
+  await ctx.answerCbQuery('⚙️ Открыто меню функций');
+}
+
+// Function: Back to Main Menu
+async function handleBackToMenu(ctx, userId) {
+  try {
+    const checkDeviceResponse = await axios.get(`${CLOUDFLARE_WORKER_URL}/api/user/${userId}/device`);
+    const { linked, deviceId } = checkDeviceResponse.data;
+
+    if (linked && deviceId) {
+      const now = new Date();
+      const timeStr = now.toLocaleString('ru-RU', { 
+        year: 'numeric', 
+        month: '2-digit', 
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      
+      const statusMessage = `Здравствуйте, выберите действие пожалуйста\n\nСтатус ПК на ${timeStr}
+🖥️ Статус ПК: Online
+🧠 ОЗУ: X / Y GB
+🔋 Батарея: X%
+📶 Сеть: Connected
+🖥️ GPU/CPU: X% / X%`;
+
+      await ctx.editMessageText(statusMessage, {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: '⚡ Вкл (Рестарт)', callback_data: 'restart_pc' },
+              { text: '💤 Выкл (Сон)', callback_data: 'sleep_pc' }
+            ],
+            [{ text: '⏹️ Принудительное выключение', callback_data: 'force_shutdown_pc' }],
+            [{ text: '⏰ Пробуждение из сна', callback_data: 'wake_pc' }],
+            [{ text: '⚙️ Доп. функции', callback_data: 'settings_menu' }]
+          ]
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error returning to menu:', error.message);
+  }
+}
+
+// Function: Monitor Toggle (On/Off)
+async function handleMonitorToggle(ctx, userId) {
+  console.log(`[monitorToggle] Sending monitor toggle command for user ${userId}`);
+
+  try {
+    // Get user's device ID
+    const checkDeviceResponse = await axios.get(`${CLOUDFLARE_WORKER_URL}/api/user/${userId}/device`);
+    const { deviceId } = checkDeviceResponse.data;
+
+    if (!deviceId) {
+      await ctx.reply('❌ ПК не подключён');
+      await ctx.answerCbQuery();
+      return;
+    }
+
+    // Send monitor toggle command to Worker
+    const commandResponse = await axios.post(
+      `${CLOUDFLARE_WORKER_URL}/api/commands/${deviceId}`,
+      {
+        command: 'monitor_toggle',
+        argument: null
+      }
+    );
+
+    console.log('[monitorToggle] Command sent successfully');
+    await ctx.reply('💻 Команда отправлена. Монитор выключится/включится...');
+    await ctx.answerCbQuery('✅ Монитор переключен');
+  } catch (error) {
+    console.error('[monitorToggle] Error:', error.message);
+    await ctx.reply('⚠️ Ошибка отправки команды');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+}
+
+// Function: Lock PC (Win + L)
+async function handleLockPC(ctx, userId) {
+  console.log(`[lockPC] Sending lock command for user ${userId}`);
+
+  try {
+    // Get user's device ID
+    const checkDeviceResponse = await axios.get(`${CLOUDFLARE_WORKER_URL}/api/user/${userId}/device`);
+    const { deviceId } = checkDeviceResponse.data;
+
+    if (!deviceId) {
+      await ctx.reply('❌ ПК не подключён');
+      await ctx.answerCbQuery();
+      return;
+    }
+
+    // Send lock command to Worker
+    const commandResponse = await axios.post(
+      `${CLOUDFLARE_WORKER_URL}/api/commands/${deviceId}`,
+      {
+        command: 'lock',
+        argument: null
+      }
+    );
+
+    console.log('[lockPC] Command sent successfully');
+    await ctx.reply('🔒 ПК заблокирован. Требуется ввод пароля.');
+    await ctx.answerCbQuery('✅ ПК заблокирован');
+  } catch (error) {
+    console.error('[lockPC] Error:', error.message);
+    await ctx.reply('⚠️ Ошибка отправки команды');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+}
+
+// Function: Shutdown Timer (user input required)
+async function handleShutdownTimer(ctx, userId) {
+  console.log(`[shutdownTimer] Initiating shutdown timer for user ${userId}`);
+
+  try {
+    // Get user's device ID
+    const checkDeviceResponse = await axios.get(`${CLOUDFLARE_WORKER_URL}/api/user/${userId}/device`);
+    const { deviceId } = checkDeviceResponse.data;
+
+    if (!deviceId) {
+      await ctx.reply('❌ ПК не подключён');
+      await ctx.answerCbQuery();
+      return;
+    }
+
+    // Ask user for time input
+    await ctx.reply(
+      '⏱️ Введите время выключения:\n\nПримеры:\n• 30 мин\n• 1 час\n• 60 (в секундах)',
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: '30 мин', callback_data: 'timer_30min' },
+              { text: '1 час', callback_data: 'timer_60min' }
+            ],
+            [
+              { text: '2 часа', callback_data: 'timer_120min' },
+              { text: '◀️ Отмена', callback_data: 'back_to_menu' }
+            ]
+          ]
+        }
+      }
+    );
+    await ctx.answerCbQuery('⏱️ Введите время');
+  } catch (error) {
+    console.error('[shutdownTimer] Error:', error.message);
+    await ctx.reply('⚠️ Ошибка');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+}
+
+// Function: Shutdown PC
+async function handleShutdownPC(ctx, userId) {
+  console.log(`[shutdownPC] Sending shutdown command for user ${userId}`);
+
+  try {
+    // Get user's device ID
+    const checkDeviceResponse = await axios.get(`${CLOUDFLARE_WORKER_URL}/api/user/${userId}/device`);
+    const { deviceId } = checkDeviceResponse.data;
+
+    if (!deviceId) {
+      await ctx.reply('❌ ПК не подключён');
+      await ctx.answerCbQuery();
+      return;
+    }
+
+    // Send shutdown command to Worker
+    const commandResponse = await axios.post(
+      `${CLOUDFLARE_WORKER_URL}/api/commands/${deviceId}`,
+      {
+        command: 'shutdown',
+        argument: null
+      }
+    );
+
+    console.log('[shutdownPC] Command sent successfully');
+    await ctx.reply('⏹️ ПК выключится в течение нескольких секунд...');
+    await ctx.answerCbQuery('✅ ПК выключается');
+  } catch (error) {
+    console.error('[shutdownPC] Error:', error.message);
+    await ctx.reply('⚠️ Ошибка отправки команды');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+}
+
+// Function: Handle Timer Selection
+async function handleTimerSelection(ctx, userId, minutes) {
+  console.log(`[timerSelection] Setting shutdown timer for ${minutes} minutes for user ${userId}`);
+
+  try {
+    // Get user's device ID
+    const checkDeviceResponse = await axios.get(`${CLOUDFLARE_WORKER_URL}/api/user/${userId}/device`);
+    const { deviceId } = checkDeviceResponse.data;
+
+    if (!deviceId) {
+      await ctx.reply('❌ ПК не подключён');
+      await ctx.answerCbQuery();
+      return;
+    }
+
+    // Convert minutes to seconds
+    const seconds = minutes * 60;
+
+    // Send shutdown timer command to Worker
+    const commandResponse = await axios.post(
+      `${CLOUDFLARE_WORKER_URL}/api/commands/${deviceId}`,
+      {
+        command: 'shutdown_timer',
+        argument: seconds
+      }
+    );
+
+    console.log('[timerSelection] Timer set successfully');
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    let timeStr = '';
+    if (hours > 0 && mins > 0) {
+      timeStr = `${hours} час ${mins} мин`;
+    } else if (hours > 0) {
+      timeStr = `${hours} час`;
+    } else {
+      timeStr = `${minutes} мин`;
+    }
+    
+    await ctx.reply(`⏱️ Таймер установлен на ${timeStr}.\n\nПК выключится через указанное время.`);
+    await ctx.answerCbQuery('✅ Таймер установлен');
+  } catch (error) {
+    console.error('[timerSelection] Error:', error.message);
+    await ctx.reply('⚠️ Ошибка установки таймера');
+    await ctx.answerCbQuery('❌ Ошибка');
+  }
+}
+
+// Command: /help
+bot.command('help', async (ctx) => {
+  const helpMessage = `
+🤖 PC Remote Control Bot
+
+Доступные команды:
+/start — главное меню
+/pair DEVICE_ID — подключить ПК
+/help — справка
+
+Кнопки:
+• 📊 Статус ПК — информация о компьютере
+• 🔌 Отключить ПК — разорвать связь с боком
+• 🔗 Подключить ПК — инструкция подключения
+`;
+
+  await ctx.reply(helpMessage);
+});
+
+// Error handling
+bot.catch((err, ctx) => {
+  console.error('🚨 Bot error:', err);
+  ctx.reply('⚠️ Произошла ошибка. Попробуйте позже.').catch(err => {
+    console.error('Failed to send error message:', err);
+  });
+});
+
+// Text input handler for process killing
+bot.on('text', async (ctx) => {
+  try {
+    // Only handle if it's a reply to the process killing prompt
+    if (ctx.message.reply_to_message?.text?.includes('Введите имя процесса')) {
+      const userId = ctx.from?.id;
+      await handleTextInputForProcessKill(ctx, userId, CLOUDFLARE_WORKER_URL);
+    }
+  } catch (error) {
+    console.error('Error in text handler:', error);
+  }
+});
+
+// Process signals
+process.on('SIGINT', () => {
+  console.log('\n✋ Bot stopped');
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.log('\n✋ Bot stopped');
+  process.exit(0);
+});
+
+// Launch bot
+bot.launch().then(() => {
+  console.log('🤖 Bot started successfully');
+  console.log(`📍 CLOUDFLARE_WORKER_URL: ${CLOUDFLARE_WORKER_URL}`);
+  console.log(`👤 ADMIN_CHAT_ID: ${ADMIN_CHAT_ID}`);
+}).catch(err => {
+  console.error('❌ Failed to launch bot:', err);
+  process.exit(1);
+});
